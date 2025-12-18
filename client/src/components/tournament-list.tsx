@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trophy, Users, Calendar, ArrowRight, Plus } from "lucide-react";
 import type { Tournament, TournamentType } from "@shared/schema";
+import { sportConfig } from "@shared/schema";
 
 interface TournamentListProps {
   tournaments: Tournament[];
@@ -11,19 +12,9 @@ interface TournamentListProps {
   isLoading?: boolean;
 }
 
-const typeLabels: Record<TournamentType, string> = {
-  padel: "Padel",
-  "football-8": "8-Sided Football",
-  "football-5": "5-Sided Football",
-};
-
-const playersPerTeam: Record<TournamentType, number> = {
-  padel: 2,
-  "football-8": 8,
-  "football-5": 5,
-};
-
 export function TournamentList({ tournaments, type, isLoading }: TournamentListProps) {
+  const typeLabel = sportConfig[type]?.label || type;
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -54,7 +45,7 @@ export function TournamentList({ tournaments, type, isLoading }: TournamentListP
           </div>
           <h3 className="text-lg font-semibold mb-2">No Tournaments Yet</h3>
           <p className="text-muted-foreground mb-6">
-            Create your first {typeLabels[type]} tournament to get started.
+            Create your first {typeLabel} tournament to get started.
           </p>
           <Link href={`/create?type=${type}`}>
             <Button data-testid="button-create-first-tournament">
@@ -73,6 +64,12 @@ export function TournamentList({ tournaments, type, isLoading }: TournamentListP
         const completedMatches = tournament.matches.filter((m) => m.status === "completed").length;
         const totalMatches = tournament.matches.length;
         const liveMatches = tournament.matches.filter((m) => m.status === "live").length;
+
+        const formatLabel = tournament.format === "single-elimination" 
+          ? "Knockout" 
+          : tournament.format === "round-robin" 
+          ? "Round Robin" 
+          : "Multi-Stage";
 
         return (
           <Link key={tournament.id} href={`/tournament/${tournament.id}`}>
@@ -98,9 +95,7 @@ export function TournamentList({ tournaments, type, isLoading }: TournamentListP
                   <Badge variant={tournament.status === "active" ? "default" : "secondary"}>
                     {tournament.status === "active" ? "Active" : tournament.status === "completed" ? "Completed" : "Draft"}
                   </Badge>
-                  <Badge variant="outline">
-                    {tournament.format === "single-elimination" ? "Knockout" : "Round Robin"}
-                  </Badge>
+                  <Badge variant="outline">{formatLabel}</Badge>
                   {liveMatches > 0 && (
                     <Badge className="bg-red-500 text-white">
                       {liveMatches} Live

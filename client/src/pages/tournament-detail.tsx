@@ -10,15 +10,25 @@ import { BracketView } from "@/components/bracket-view";
 import { StandingsTable } from "@/components/standings-table";
 import { MatchList } from "@/components/match-list";
 import { ScoreDialog } from "@/components/score-dialog";
-import { ArrowLeft, Trophy, Users, Calendar, Share2, Copy, Check } from "lucide-react";
+import { ArrowLeft, Trophy, Users, Calendar, Share2, Copy, Check, Layers } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Tournament, Match } from "@shared/schema";
+import type { Tournament, Match, TournamentType, TournamentFormat } from "@shared/schema";
+import { sportConfig } from "@shared/schema";
 
-const typeLabels = {
-  padel: "Padel",
-  "football-8": "8-Sided Football",
-  "football-5": "5-Sided Football",
-};
+function getBackPath(type: TournamentType): string {
+  if (type === "badminton-singles" || type === "badminton-doubles") return "/badminton";
+  if (type === "tennis-singles" || type === "tennis-doubles") return "/tennis";
+  return `/${type}`;
+}
+
+function getFormatLabel(format: TournamentFormat): string {
+  switch (format) {
+    case "single-elimination": return "Single Elimination";
+    case "round-robin": return "Round Robin";
+    case "multi-stage": return "Multi-Stage";
+    default: return format;
+  }
+}
 
 export default function TournamentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -94,17 +104,29 @@ export default function TournamentDetailPage() {
     );
   }
 
+  const typeLabel = sportConfig[tournament.type]?.label || tournament.type;
   const completedMatches = tournament.matches.filter((m) => m.status === "completed").length;
   const liveMatches = tournament.matches.filter((m) => m.status === "live").length;
   const upcomingMatches = tournament.matches.filter((m) => m.status === "upcoming").length;
 
+  const hasGroupStage = tournament.format === "multi-stage" && tournament.stages?.some(s => s.type === "group");
+  const hasKnockout = tournament.format === "single-elimination" || 
+    (tournament.format === "multi-stage" && tournament.stages?.some(s => s.type === "knockout"));
+
+  const getDefaultTab = () => {
+    if (tournament.format === "single-elimination") return "bracket";
+    if (tournament.format === "round-robin") return "standings";
+    if (tournament.format === "multi-stage") return hasGroupStage ? "groups" : "bracket";
+    return "matches";
+  };
+
   return (
     <div className="min-h-screen py-8 pb-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <Link href={`/${tournament.type === "padel" ? "padel" : tournament.type}`}>
+        <Link href={getBackPath(tournament.type)}>
           <Button variant="ghost" className="mb-4" data-testid="button-back-to-list">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to {typeLabels[tournament.type]}
+            Back to {typeLabel}
           </Button>
         </Link>
 
@@ -124,9 +146,12 @@ export default function TournamentDetailPage() {
               )}
             </div>
             <div className="flex items-center gap-3 text-muted-foreground flex-wrap">
-              <span>{typeLabels[tournament.type]}</span>
+              <span>{typeLabel}</span>
               <span>•</span>
-              <span>{tournament.format === "single-elimination" ? "Single Elimination" : "Round Robin"}</span>
+              <span className="flex items-center gap-1">
+                {tournament.format === "multi-stage" && <Layers className="h-3.5 w-3.5" />}
+                {getFormatLabel(tournament.format)}
+              </span>
               <span>•</span>
               <span>{tournament.teams.length} Teams</span>
             </div>
@@ -202,13 +227,19 @@ export default function TournamentDetailPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue={tournament.format === "single-elimination" ? "bracket" : "standings"} className="w-full">
+        <Tabs defaultValue={getDefaultTab()} className="w-full">
           <TabsList className="mb-6">
             {tournament.format === "single-elimination" && (
               <TabsTrigger value="bracket" data-testid="tab-bracket">Bracket</TabsTrigger>
             )}
             {tournament.format === "round-robin" && (
               <TabsTrigger value="standings" data-testid="tab-standings">Standings</TabsTrigger>
+            )}
+            {tournament.format === "multi-stage" && hasGroupStage && (
+              <TabsTrigger value="groups" data-testid="tab-groups">Groups</TabsTrigger>
+            )}
+            {tournament.format === "multi-stage" && hasKnockout && (
+              <TabsTrigger value="bracket" data-testid="tab-bracket">Knockout</TabsTrigger>
             )}
             <TabsTrigger value="matches" data-testid="tab-matches">Matches</TabsTrigger>
             <TabsTrigger value="teams" data-testid="tab-teams">Teams</TabsTrigger>
@@ -223,6 +254,40 @@ export default function TournamentDetailPage() {
           {tournament.format === "round-robin" && (
             <TabsContent value="standings">
               <StandingsTable tournament={tournament} />
+            </TabsContent>
+          )}
+
+          {tournament.format === "multi-stage" && hasGroupStage && (
+            <TabsContent value="groups">
+              <div className="space-y-8">
+                {tournament.stages?.filter(s => s.type === "group").map((stage) => (
+                  <div key={stage.id}>
+                    {stage.groups?.map((group) => {
+                      const groupTeams = tournament.teams.filter(t => group.teamIds.includes(t.id));
+                      const groupMatches = tournament.matches.filter(m => m.groupName === group.name);
+                      
+                      return (
+                        <div key={group.id} className="mb-8">
+                          <h3 className="text-lg font-semibold mb-4">{group.name}</h3>
+                          <StandingsTable 
+                            tournament={{
+                              ...tournament,
+                              teams: groupTeams,
+                              matches: groupMatches,
+                            }} 
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+          )}
+
+          {tournament.format === "multi-stage" && hasKnockout && (
+            <TabsContent value="bracket">
+              <BracketView tournament={tournament} onEditScore={handleEditScore} />
             </TabsContent>
           )}
 

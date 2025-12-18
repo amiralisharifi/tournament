@@ -2,35 +2,79 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, Users, Calendar, Share2, Zap, Target, ArrowRight } from "lucide-react";
+import { Trophy, Users, Calendar, Share2, Zap, Target, ArrowRight, Circle, Feather } from "lucide-react";
+import { SiNba } from "react-icons/si";
 
 const sportTypes = [
   {
     id: "padel",
     title: "Padel",
     description: "Create tournaments for doubles padel matches with 2 players per team.",
-    players: "2 Players per Team",
-    icon: "🎾",
+    players: "2 per Team",
     href: "/padel",
     color: "from-emerald-500/20 to-teal-500/20",
+    iconColor: "text-emerald-600 dark:text-emerald-400",
+    Icon: Target,
+  },
+  {
+    id: "tennis",
+    title: "Tennis",
+    description: "Singles and doubles tennis tournaments with bracket management.",
+    players: "1-2 per Team",
+    href: "/tennis",
+    color: "from-lime-500/20 to-green-500/20",
+    iconColor: "text-lime-600 dark:text-lime-400",
+    Icon: Target,
+  },
+  {
+    id: "badminton",
+    title: "Badminton",
+    description: "Singles and doubles badminton tournaments with court assignments.",
+    players: "1-2 per Team",
+    href: "/badminton",
+    color: "from-green-500/20 to-lime-500/20",
+    iconColor: "text-green-600 dark:text-green-400",
+    Icon: Feather,
+  },
+  {
+    id: "basketball",
+    title: "Basketball",
+    description: "5v5 basketball tournaments with team management and scoring.",
+    players: "5 per Team",
+    href: "/basketball",
+    color: "from-orange-500/20 to-red-500/20",
+    iconColor: "text-orange-600 dark:text-orange-400",
+    CustomIcon: SiNba,
+  },
+  {
+    id: "volleyball",
+    title: "Volleyball",
+    description: "6v6 volleyball tournaments with group stages and playoffs.",
+    players: "6 per Team",
+    href: "/volleyball",
+    color: "from-yellow-500/20 to-amber-500/20",
+    iconColor: "text-yellow-600 dark:text-yellow-400",
+    Icon: Circle,
   },
   {
     id: "football-8",
-    title: "8-Sided Football",
+    title: "Football 8v8",
     description: "Organize 8-a-side football tournaments with full team management.",
-    players: "8 Players per Team",
-    icon: "⚽",
+    players: "8 per Team",
     href: "/football-8",
     color: "from-blue-500/20 to-indigo-500/20",
+    iconColor: "text-blue-600 dark:text-blue-400",
+    Icon: Users,
   },
   {
     id: "football-5",
-    title: "5-Sided Football",
+    title: "Football 5v5",
     description: "Manage futsal-style 5-a-side tournaments with bracket generation.",
-    players: "5 Players per Team",
-    icon: "⚽",
+    players: "5 per Team",
     href: "/football-5",
-    color: "from-orange-500/20 to-amber-500/20",
+    color: "from-sky-500/20 to-cyan-500/20",
+    iconColor: "text-sky-600 dark:text-sky-400",
+    Icon: Users,
   },
 ];
 
@@ -42,8 +86,8 @@ const features = [
   },
   {
     icon: Calendar,
-    title: "Real Schedules",
-    description: "Generate fixtures around your venues and time slots automatically.",
+    title: "Multi-Stage Tournaments",
+    description: "Group stages followed by knockout rounds, just like the pros.",
   },
   {
     icon: Share2,
@@ -53,7 +97,7 @@ const features = [
   {
     icon: Target,
     title: "Any Format",
-    description: "Single elimination, round robin, or group stages - all in one place.",
+    description: "Single elimination, round robin, or multi-stage - all in one place.",
   },
 ];
 
@@ -80,8 +124,8 @@ export default function Home() {
               <span className="text-primary">Your Rules</span>
             </h1>
             <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Create tournament brackets, generate fixtures and keep live standings up to date. 
-              For Padel, 8-sided football, and 5-sided football tournaments.
+              Create tournament brackets, generate fixtures and keep live standings up to date.
+              Multi-stage tournaments with group stages and knockout rounds.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/create">
@@ -107,26 +151,26 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {sportTypes.map((sport) => (
               <Link key={sport.id} href={sport.href}>
-                <Card className="h-full hover-elevate active-elevate-2 cursor-pointer transition-all duration-200 overflow-visible group">
-                  <CardHeader>
-                    <div className={`w-16 h-16 rounded-lg bg-gradient-to-br ${sport.color} flex items-center justify-center text-3xl mb-4`}>
-                      {sport.id === "padel" ? (
-                        <Target className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-                      ) : (
-                        <Users className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                      )}
+                <Card className="h-full hover-elevate active-elevate-2 cursor-pointer transition-all duration-200 overflow-visible group" data-testid={`card-sport-${sport.id}`}>
+                  <CardHeader className="pb-3">
+                    <div className={`w-14 h-14 rounded-lg bg-gradient-to-br ${sport.color} flex items-center justify-center mb-3`}>
+                      {sport.CustomIcon ? (
+                        <sport.CustomIcon className={`h-7 w-7 ${sport.iconColor}`} />
+                      ) : sport.Icon ? (
+                        <sport.Icon className={`h-7 w-7 ${sport.iconColor}`} />
+                      ) : null}
                     </div>
-                    <CardTitle className="flex items-center justify-between">
+                    <CardTitle className="flex items-center justify-between text-lg">
                       {sport.title}
-                      <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                     </CardTitle>
-                    <CardDescription>{sport.description}</CardDescription>
+                    <CardDescription className="text-sm">{sport.description}</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <Badge variant="outline">{sport.players}</Badge>
+                  <CardContent className="pt-0">
+                    <Badge variant="outline" className="text-xs">{sport.players}</Badge>
                   </CardContent>
                 </Card>
               </Link>
@@ -173,7 +217,7 @@ export default function Home() {
               </div>
               <h3 className="font-semibold mb-2">Set Up Your Tournament</h3>
               <p className="text-sm text-muted-foreground">
-                Add teams or players and choose your format. The bracket is created immediately.
+                Add teams or players and choose your format. Single elimination, round robin, or multi-stage with groups.
               </p>
             </div>
             <div className="text-center">
@@ -182,7 +226,7 @@ export default function Home() {
               </div>
               <h3 className="font-semibold mb-2">Generate the Schedule</h3>
               <p className="text-sm text-muted-foreground">
-                Define days, time slots, and venues. The scheduler assigns everything automatically.
+                Brackets and fixtures are created automatically. Add venues and time slots if needed.
               </p>
             </div>
             <div className="text-center">

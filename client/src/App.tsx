@@ -10,6 +10,10 @@ import Home from "@/pages/home";
 import PadelPage from "@/pages/padel";
 import Football8Page from "@/pages/football-8";
 import Football5Page from "@/pages/football-5";
+import BasketballPage from "@/pages/basketball";
+import VolleyballPage from "@/pages/volleyball";
+import BadmintonPage from "@/pages/badminton";
+import TennisPage from "@/pages/tennis";
 import CreateTournamentPage from "@/pages/create-tournament";
 import TournamentDetailPage from "@/pages/tournament-detail";
 import NotFound from "@/pages/not-found";
@@ -21,6 +25,10 @@ function Router() {
       <Route path="/padel" component={PadelPage} />
       <Route path="/football-8" component={Football8Page} />
       <Route path="/football-5" component={Football5Page} />
+      <Route path="/basketball" component={BasketballPage} />
+      <Route path="/volleyball" component={VolleyballPage} />
+      <Route path="/badminton" component={BadmintonPage} />
+      <Route path="/tennis" component={TennisPage} />
       <Route path="/create" component={CreateTournamentPage} />
       <Route path="/tournament/:id" component={TournamentDetailPage} />
       <Route component={NotFound} />

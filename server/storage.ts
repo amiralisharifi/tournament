@@ -5,7 +5,9 @@ import {
   type InsertTournament,
   type Match,
   type UpdateMatchScore,
-  type TournamentType
+  type TournamentType,
+  type Stage,
+  type Group
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -21,7 +23,7 @@ export interface IStorage {
   updateMatchScore(tournamentId: string, matchId: string, data: UpdateMatchScore): Promise<Match | undefined>;
 }
 
-function generateSingleEliminationMatches(teams: { id: string; name: string }[]): Match[] {
+function generateSingleEliminationMatches(teams: { id: string; name: string }[], stageId?: string): Match[] {
   const matches: Match[] = [];
   const numTeams = teams.length;
   
@@ -59,6 +61,7 @@ function generateSingleEliminationMatches(teams: { id: string; name: string }[])
           matches.push({
             id: randomUUID(),
             tournamentId: "",
+            stageId,
             round,
             matchNumber: globalMatchNumber++,
             team1Id: null,
@@ -72,6 +75,7 @@ function generateSingleEliminationMatches(teams: { id: string; name: string }[])
           matches.push({
             id: randomUUID(),
             tournamentId: "",
+            stageId,
             round,
             matchNumber: globalMatchNumber++,
             team1Id: team2.id,
@@ -85,6 +89,7 @@ function generateSingleEliminationMatches(teams: { id: string; name: string }[])
           matches.push({
             id: randomUUID(),
             tournamentId: "",
+            stageId,
             round,
             matchNumber: globalMatchNumber++,
             team1Id: team1.id,
@@ -98,6 +103,7 @@ function generateSingleEliminationMatches(teams: { id: string; name: string }[])
           matches.push({
             id: randomUUID(),
             tournamentId: "",
+            stageId,
             round,
             matchNumber: globalMatchNumber++,
             team1Id: team1.id,
@@ -112,6 +118,7 @@ function generateSingleEliminationMatches(teams: { id: string; name: string }[])
         matches.push({
           id: randomUUID(),
           tournamentId: "",
+          stageId,
           round,
           matchNumber: globalMatchNumber++,
           team1Id: null,
@@ -149,7 +156,7 @@ function generateSingleEliminationMatches(teams: { id: string; name: string }[])
   return matches;
 }
 
-function generateRoundRobinMatches(teams: { id: string; name: string }[]): Match[] {
+function generateRoundRobinMatches(teams: { id: string; name: string }[], stageId?: string, groupName?: string): Match[] {
   const matches: Match[] = [];
   
   if (teams.length < 2) {
@@ -163,6 +170,7 @@ function generateRoundRobinMatches(teams: { id: string; name: string }[]): Match
       matches.push({
         id: randomUUID(),
         tournamentId: "",
+        stageId,
         round: 1,
         matchNumber: matchNumber++,
         team1Id: teams[i].id,
@@ -171,6 +179,7 @@ function generateRoundRobinMatches(teams: { id: string; name: string }[]): Match
         team2Score: 0,
         status: "upcoming",
         winnerId: null,
+        groupName,
       });
     }
   }
@@ -178,9 +187,60 @@ function generateRoundRobinMatches(teams: { id: string; name: string }[]): Match
   return matches;
 }
 
+function generateMultiStageMatches(
+  teams: { id: string; name: string }[],
+  stageConfigs: { id: string; name: string; type: "group" | "knockout"; order: number; groupCount?: number; qualifiedCount?: number }[]
+): { matches: Match[]; stages: Stage[] } {
+  const matches: Match[] = [];
+  const stages: Stage[] = [];
+  
+  const sortedConfigs = [...stageConfigs].sort((a, b) => a.order - b.order);
+  
+  for (const config of sortedConfigs) {
+    const stage: Stage = {
+      id: config.id,
+      name: config.name,
+      type: config.type,
+      order: config.order,
+      qualifiedCount: config.qualifiedCount,
+    };
+    
+    if (config.type === "group") {
+      const groupCount = config.groupCount || 2;
+      const groups: Group[] = [];
+      const teamsPerGroup = Math.ceil(teams.length / groupCount);
+      
+      for (let g = 0; g < groupCount; g++) {
+        const groupTeams = teams.slice(g * teamsPerGroup, (g + 1) * teamsPerGroup);
+        const groupName = `Group ${String.fromCharCode(65 + g)}`;
+        
+        groups.push({
+          id: randomUUID(),
+          name: groupName,
+          teamIds: groupTeams.map(t => t.id),
+        });
+        
+        const groupMatches = generateRoundRobinMatches(groupTeams, config.id, groupName);
+        matches.push(...groupMatches);
+      }
+      
+      stage.groups = groups;
+    } else if (config.type === "knockout") {
+      if (config.order === 1) {
+        const knockoutMatches = generateSingleEliminationMatches(teams, config.id);
+        matches.push(...knockoutMatches);
+      }
+    }
+    
+    stages.push(stage);
+  }
+  
+  return { matches, stages };
+}
+
 function getMatchPositionInRound(matches: Match[], match: Match): number {
   const roundMatches = matches
-    .filter(m => m.round === match.round)
+    .filter(m => m.round === match.round && m.stageId === match.stageId)
     .sort((a, b) => a.matchNumber - b.matchNumber);
   return roundMatches.findIndex(m => m.id === match.id);
 }
@@ -188,11 +248,12 @@ function getMatchPositionInRound(matches: Match[], match: Match): number {
 function advanceWinnerToNextRound(matches: Match[], completedMatch: Match): void {
   if (!completedMatch.winnerId) return;
   
+  const stageMatches = matches.filter(m => m.stageId === completedMatch.stageId);
   const round = completedMatch.round;
-  const positionInRound = getMatchPositionInRound(matches, completedMatch);
+  const positionInRound = getMatchPositionInRound(stageMatches, completedMatch);
   if (positionInRound === -1) return;
   
-  const nextRoundMatches = matches
+  const nextRoundMatches = stageMatches
     .filter(m => m.round === round + 1)
     .sort((a, b) => a.matchNumber - b.matchNumber);
   
@@ -215,11 +276,12 @@ function advanceWinnerToNextRound(matches: Match[], completedMatch: Match): void
 function clearWinnerFromNextRound(matches: Match[], match: Match, previousWinnerId: string | null): void {
   if (!previousWinnerId) return;
   
+  const stageMatches = matches.filter(m => m.stageId === match.stageId);
   const round = match.round;
-  const positionInRound = getMatchPositionInRound(matches, match);
+  const positionInRound = getMatchPositionInRound(stageMatches, match);
   if (positionInRound === -1) return;
   
-  const nextRoundMatches = matches
+  const nextRoundMatches = stageMatches
     .filter(m => m.round === round + 1)
     .sort((a, b) => a.matchNumber - b.matchNumber);
   
@@ -314,10 +376,18 @@ export class MemStorage implements IStorage {
     }));
     
     let matches: Match[];
+    let stages: Stage[] | undefined;
+    
     if (data.format === "single-elimination") {
       matches = generateSingleEliminationMatches(validatedTeams);
-    } else {
+    } else if (data.format === "round-robin") {
       matches = generateRoundRobinMatches(validatedTeams);
+    } else if (data.format === "multi-stage" && data.stages) {
+      const result = generateMultiStageMatches(validatedTeams, data.stages);
+      matches = result.matches;
+      stages = result.stages;
+    } else {
+      matches = generateSingleEliminationMatches(validatedTeams);
     }
     
     matches.forEach(m => m.tournamentId = id);
@@ -329,6 +399,7 @@ export class MemStorage implements IStorage {
       format: data.format,
       teams: validatedTeams,
       matches,
+      stages,
       status: "active",
       createdAt: new Date().toISOString(),
     };
@@ -367,7 +438,10 @@ export class MemStorage implements IStorage {
         match.winnerId = null;
       }
       
-      if (tournament.format === "single-elimination") {
+      const isKnockoutMatch = tournament.format === "single-elimination" || 
+        (tournament.format === "multi-stage" && tournament.stages?.find(s => s.id === match.stageId)?.type === "knockout");
+      
+      if (isKnockoutMatch) {
         if (wasCompleted && previousWinnerId && previousWinnerId !== match.winnerId) {
           clearWinnerFromNextRound(tournament.matches, match, previousWinnerId);
         }
@@ -379,7 +453,10 @@ export class MemStorage implements IStorage {
     } else {
       match.winnerId = null;
       
-      if (tournament.format === "single-elimination" && wasCompleted && previousWinnerId) {
+      const isKnockoutMatch = tournament.format === "single-elimination" || 
+        (tournament.format === "multi-stage" && tournament.stages?.find(s => s.id === match.stageId)?.type === "knockout");
+      
+      if (isKnockoutMatch && wasCompleted && previousWinnerId) {
         clearWinnerFromNextRound(tournament.matches, match, previousWinnerId);
       }
     }

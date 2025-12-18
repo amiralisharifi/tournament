@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Router } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,7 +18,7 @@ import CreateTournamentPage from "@/pages/create-tournament";
 import TournamentDetailPage from "@/pages/tournament-detail";
 import NotFound from "@/pages/not-found";
 
-function Router() {
+function Routes() {
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -41,13 +41,15 @@ function App() {
     <ThemeProvider defaultTheme="light" storageKey="tourneypro-theme">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <div className="min-h-screen flex flex-col bg-background">
-            <Navbar />
-            <main className="flex-1">
-              <Router />
-            </main>
-            <Footer />
-          </div>
+          <Router>
+            <div className="min-h-screen flex flex-col bg-background">
+              <Navbar />
+              <main className="flex-1">
+                <Routes />
+              </main>
+              <Footer />
+            </div>
+          </Router>
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>

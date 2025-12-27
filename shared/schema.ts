@@ -19,6 +19,7 @@ export type User = typeof users.$inferSelect;
 
 export type TournamentType = 
   | "padel" 
+  | "padel-americano"
   | "football-8" 
   | "football-5" 
   | "basketball"
@@ -28,7 +29,7 @@ export type TournamentType =
   | "tennis-singles"
   | "tennis-doubles";
 
-export type TournamentFormat = "single-elimination" | "round-robin" | "multi-stage";
+export type TournamentFormat = "single-elimination" | "round-robin" | "multi-stage" | "americano";
 export type MatchStatus = "upcoming" | "live" | "completed";
 
 export interface Player {
@@ -57,6 +58,24 @@ export interface Match {
   scheduledTime?: string;
   venue?: string;
   groupName?: string;
+  // Americano-specific: temporary pairings for the round
+  team1PlayerIds?: string[];
+  team2PlayerIds?: string[];
+}
+
+// Americano tournament player standings
+export interface AmericanoPlayer {
+  id: string;
+  name: string;
+  totalPoints: number;
+  matchesPlayed: number;
+  matchesWon: number;
+}
+
+// Americano tournament settings
+export interface AmericanoSettings {
+  pointsPerMatch: number; // 16, 24, or 32
+  courts: number;
 }
 
 export interface Stage {
@@ -84,10 +103,14 @@ export interface Tournament {
   stages?: Stage[];
   status: "draft" | "active" | "completed";
   createdAt: string;
+  // Americano-specific fields
+  players?: Player[];
+  americanoSettings?: AmericanoSettings;
 }
 
 export const tournamentTypes = [
   "padel",
+  "padel-americano",
   "football-8",
   "football-5",
   "basketball",
@@ -101,7 +124,7 @@ export const tournamentTypes = [
 export const insertTournamentSchema = z.object({
   name: z.string().min(1, "Tournament name is required"),
   type: z.enum(tournamentTypes),
-  format: z.enum(["single-elimination", "round-robin", "multi-stage"]),
+  format: z.enum(["single-elimination", "round-robin", "multi-stage", "americano"]),
   teams: z.array(z.object({
     id: z.string(),
     name: z.string().min(1, "Team name is required"),
@@ -109,7 +132,15 @@ export const insertTournamentSchema = z.object({
       id: z.string(),
       name: z.string().min(1, "Player name is required"),
     })),
-  })),
+  })).optional(),
+  players: z.array(z.object({
+    id: z.string(),
+    name: z.string().min(1, "Player name is required"),
+  })).optional(),
+  americanoSettings: z.object({
+    pointsPerMatch: z.number().min(16).max(32),
+    courts: z.number().min(1).max(10),
+  }).optional(),
   stages: z.array(z.object({
     id: z.string(),
     name: z.string(),
@@ -130,8 +161,9 @@ export const updateMatchScoreSchema = z.object({
 
 export type UpdateMatchScore = z.infer<typeof updateMatchScoreSchema>;
 
-export const sportConfig: Record<TournamentType, { playersPerTeam: number; label: string; icon: string }> = {
+export const sportConfig: Record<TournamentType, { playersPerTeam: number; label: string; icon: string; isAmericano?: boolean }> = {
   "padel": { playersPerTeam: 2, label: "Padel", icon: "racquet" },
+  "padel-americano": { playersPerTeam: 1, label: "Padel Americano", icon: "racquet", isAmericano: true },
   "football-8": { playersPerTeam: 8, label: "Football 8v8", icon: "football" },
   "football-5": { playersPerTeam: 5, label: "Football 5v5", icon: "football" },
   "basketball": { playersPerTeam: 5, label: "Basketball", icon: "basketball" },

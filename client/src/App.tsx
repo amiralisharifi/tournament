@@ -8,6 +8,7 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import Home from "@/pages/home";
 import PadelPage from "@/pages/padel";
+import PadelAmericanoPage from "@/pages/padel-americano";
 import Football8Page from "@/pages/football-8";
 import Football5Page from "@/pages/football-5";
 import BasketballPage from "@/pages/basketball";
@@ -23,6 +24,7 @@ function Routes() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/padel" component={PadelPage} />
+      <Route path="/padel-americano" component={PadelAmericanoPage} />
       <Route path="/football-8" component={Football8Page} />
       <Route path="/football-5" component={Football5Page} />
       <Route path="/basketball" component={BasketballPage} />

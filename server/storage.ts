@@ -7,7 +7,9 @@ import {
   type UpdateMatchScore,
   type TournamentType,
   type Stage,
-  type Group
+  type Group,
+  type Player,
+  type AmericanoSettings
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -317,6 +319,63 @@ function clearWinnerFromNextRound(matches: Match[], match: Match, previousWinner
   }
 }
 
+function generateAmericanoMatches(players: Player[], courts: number): Match[] {
+  const matches: Match[] = [];
+  const n = players.length;
+  
+  if (n < 4) {
+    throw new Error("At least 4 players are required for Americano");
+  }
+  
+  const pairings: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      pairings.push([i, j]);
+    }
+  }
+  
+  const shuffledPairings = pairings.sort(() => Math.random() - 0.5);
+  
+  let round = 1;
+  let matchNumber = 1;
+  let pairingIndex = 0;
+  
+  while (pairingIndex < shuffledPairings.length - 1) {
+    const matchesPerRound = Math.min(courts, Math.floor((shuffledPairings.length - pairingIndex) / 2));
+    
+    for (let m = 0; m < matchesPerRound && pairingIndex < shuffledPairings.length - 1; m++) {
+      const pair1 = shuffledPairings[pairingIndex];
+      const pair2 = shuffledPairings[pairingIndex + 1];
+      
+      if (!pair1 || !pair2) break;
+      
+      const team1PlayerIds = [players[pair1[0]].id, players[pair1[1]].id];
+      const team2PlayerIds = [players[pair2[0]].id, players[pair2[1]].id];
+      
+      matches.push({
+        id: randomUUID(),
+        tournamentId: "",
+        round,
+        matchNumber: matchNumber++,
+        team1Id: `round-${round}-match-${m}-team1`,
+        team2Id: `round-${round}-match-${m}-team2`,
+        team1Score: 0,
+        team2Score: 0,
+        status: "upcoming",
+        winnerId: null,
+        team1PlayerIds,
+        team2PlayerIds,
+      });
+      
+      pairingIndex += 2;
+    }
+    
+    round++;
+  }
+  
+  return matches;
+}
+
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private tournaments: Map<string, Tournament>;
@@ -360,11 +419,42 @@ export class MemStorage implements IStorage {
   }
 
   async createTournament(data: InsertTournament): Promise<Tournament> {
-    if (data.teams.length < 2) {
-      throw new Error("At least 2 teams are required for a tournament");
+    const id = randomUUID();
+    
+    if (data.format === "americano") {
+      if (!data.players || data.players.length < 4) {
+        throw new Error("At least 4 players are required for Americano");
+      }
+      
+      const validatedPlayers = data.players.map(p => ({
+        id: randomUUID(),
+        name: p.name,
+      }));
+      
+      const courts = data.americanoSettings?.courts || 1;
+      const matches = generateAmericanoMatches(validatedPlayers, courts);
+      matches.forEach(m => m.tournamentId = id);
+      
+      const tournament: Tournament = {
+        id,
+        name: data.name,
+        type: data.type,
+        format: data.format,
+        teams: [],
+        matches,
+        players: validatedPlayers,
+        americanoSettings: data.americanoSettings || { pointsPerMatch: 32, courts: 1 },
+        status: "active",
+        createdAt: new Date().toISOString(),
+      };
+      
+      this.tournaments.set(id, tournament);
+      return tournament;
     }
     
-    const id = randomUUID();
+    if (!data.teams || data.teams.length < 2) {
+      throw new Error("At least 2 teams are required for a tournament");
+    }
     
     const validatedTeams = data.teams.map(t => ({
       id: randomUUID(),

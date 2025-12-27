@@ -17,6 +17,16 @@ const sportTypes = [
     Icon: Target,
   },
   {
+    id: "padel-americano",
+    title: "Padel Americano",
+    description: "Rotating partner format where everyone plays with everyone.",
+    players: "Individual",
+    href: "/padel-americano",
+    color: "from-teal-500/20 to-cyan-500/20",
+    iconColor: "text-teal-600 dark:text-teal-400",
+    Icon: Zap,
+  },
+  {
     id: "tennis",
     title: "Tennis",
     description: "Singles and doubles tennis tournaments with bracket management.",

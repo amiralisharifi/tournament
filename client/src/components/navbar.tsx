@@ -16,6 +16,7 @@ const navLinks = [
 
 const sportsMenu = [
   { href: "/padel", label: "Padel" },
+  { href: "/padel-americano", label: "Padel Americano" },
   { href: "/tennis", label: "Tennis" },
   { href: "/badminton", label: "Badminton" },
   { href: "/basketball", label: "Basketball" },

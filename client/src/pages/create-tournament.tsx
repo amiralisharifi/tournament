@@ -18,8 +18,9 @@ import { SiNba } from "react-icons/si";
 import type { TournamentType, InsertTournament, TournamentFormat } from "@shared/schema";
 import { sportConfig, tournamentTypes } from "@shared/schema";
 
-const sportTypesList: { id: TournamentType; label: string; players: number; Icon: any }[] = [
+const sportTypesList: { id: TournamentType; label: string; players: number; Icon: any; isAmericano?: boolean }[] = [
   { id: "padel", label: "Padel", players: 2, Icon: Target },
+  { id: "padel-americano", label: "Padel Americano", players: 1, Icon: Target, isAmericano: true },
   { id: "tennis-singles", label: "Tennis Singles", players: 1, Icon: Target },
   { id: "tennis-doubles", label: "Tennis Doubles", players: 2, Icon: Target },
   { id: "badminton-singles", label: "Badminton Singles", players: 1, Icon: Feather },
@@ -33,7 +34,7 @@ const sportTypesList: { id: TournamentType; label: string; players: number; Icon
 const formSchema = z.object({
   name: z.string().min(1, "Tournament name is required").max(100),
   type: z.enum(tournamentTypes),
-  format: z.enum(["single-elimination", "round-robin", "multi-stage"]),
+  format: z.enum(["single-elimination", "round-robin", "multi-stage", "americano"]),
   teams: z.array(z.object({
     id: z.string(),
     name: z.string().min(1, "Team name is required"),
@@ -41,7 +42,15 @@ const formSchema = z.object({
       id: z.string(),
       name: z.string().min(1, "Player name is required"),
     })).min(1),
-  })).min(2, "At least 2 teams are required"),
+  })).optional(),
+  players: z.array(z.object({
+    id: z.string(),
+    name: z.string().min(1, "Player name is required"),
+  })).optional(),
+  americanoSettings: z.object({
+    pointsPerMatch: z.number(),
+    courts: z.number(),
+  }).optional(),
   stages: z.array(z.object({
     id: z.string(),
     name: z.string(),
@@ -76,15 +85,22 @@ export default function CreateTournamentPage() {
     players: Array.from({ length: getPlayersCount(type) }, createEmptyPlayer),
   });
 
+  const isAmericanoType = (type: TournamentType) => {
+    return sportTypesList.find(s => s.id === type)?.isAmericano || false;
+  };
+
   const defaultType = urlType && tournamentTypes.includes(urlType as any) ? urlType : "padel";
+  const defaultIsAmericano = isAmericanoType(defaultType);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       type: defaultType,
-      format: "single-elimination",
-      teams: [createEmptyTeam(defaultType), createEmptyTeam(defaultType)],
+      format: defaultIsAmericano ? "americano" : "single-elimination",
+      teams: defaultIsAmericano ? [] : [createEmptyTeam(defaultType), createEmptyTeam(defaultType)],
+      players: defaultIsAmericano ? [createEmptyPlayer(), createEmptyPlayer(), createEmptyPlayer(), createEmptyPlayer()] : [],
+      americanoSettings: { pointsPerMatch: 32, courts: 1 },
       stages: [
         { id: crypto.randomUUID(), name: "Group Stage", type: "group", order: 1, groupCount: 2, qualifiedCount: 2 },
         { id: crypto.randomUUID(), name: "Knockout", type: "knockout", order: 2 },
@@ -94,8 +110,11 @@ export default function CreateTournamentPage() {
 
   const watchType = form.watch("type");
   const watchFormat = form.watch("format");
-  const watchTeams = form.watch("teams");
+  const watchTeams = form.watch("teams") || [];
+  const watchPlayers = form.watch("players") || [];
+  const watchAmericanoSettings = form.watch("americanoSettings");
   const watchStages = form.watch("stages") || [];
+  const isAmericano = watchFormat === "americano";
 
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -103,10 +122,15 @@ export default function CreateTournamentPage() {
         name: data.name,
         type: data.type,
         format: data.format,
-        teams: data.teams,
       };
-      if (data.format === "multi-stage" && data.stages) {
-        payload.stages = data.stages;
+      if (data.format === "americano") {
+        payload.players = data.players;
+        payload.americanoSettings = data.americanoSettings;
+      } else {
+        payload.teams = data.teams;
+        if (data.format === "multi-stage" && data.stages) {
+          payload.stages = data.stages;
+        }
       }
       const response = await apiRequest("POST", "/api/tournaments", payload);
       return response.json();
@@ -129,27 +153,50 @@ export default function CreateTournamentPage() {
   });
 
   const addTeam = () => {
-    const currentTeams = form.getValues("teams");
+    const currentTeams = form.getValues("teams") || [];
     form.setValue("teams", [...currentTeams, createEmptyTeam(watchType)]);
   };
 
   const removeTeam = (index: number) => {
-    const currentTeams = form.getValues("teams");
+    const currentTeams = form.getValues("teams") || [];
     if (currentTeams.length > 2) {
       form.setValue("teams", currentTeams.filter((_, i) => i !== index));
     }
   };
 
   const updateTeamName = (index: number, name: string) => {
-    const currentTeams = form.getValues("teams");
+    const currentTeams = form.getValues("teams") || [];
     currentTeams[index].name = name;
     form.setValue("teams", [...currentTeams]);
   };
 
-  const updatePlayerName = (teamIndex: number, playerIndex: number, name: string) => {
-    const currentTeams = form.getValues("teams");
+  const updateTeamPlayerName = (teamIndex: number, playerIndex: number, name: string) => {
+    const currentTeams = form.getValues("teams") || [];
     currentTeams[teamIndex].players[playerIndex].name = name;
     form.setValue("teams", [...currentTeams]);
+  };
+
+  const addAmericanoPlayer = () => {
+    const currentPlayers = form.getValues("players") || [];
+    form.setValue("players", [...currentPlayers, createEmptyPlayer()]);
+  };
+
+  const removeAmericanoPlayer = (index: number) => {
+    const currentPlayers = form.getValues("players") || [];
+    if (currentPlayers.length > 4) {
+      form.setValue("players", currentPlayers.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateAmericanoPlayerName = (index: number, name: string) => {
+    const currentPlayers = form.getValues("players") || [];
+    currentPlayers[index].name = name;
+    form.setValue("players", [...currentPlayers]);
+  };
+
+  const updateAmericanoSettings = (field: "pointsPerMatch" | "courts", value: number) => {
+    const current = form.getValues("americanoSettings") || { pointsPerMatch: 32, courts: 1 };
+    form.setValue("americanoSettings", { ...current, [field]: value });
   };
 
   const updateGroupCount = (count: number) => {
@@ -166,13 +213,15 @@ export default function CreateTournamentPage() {
   };
 
   const canProceedStep1 = form.watch("name")?.trim().length > 0;
-  const canProceedStep2 = watchTeams.every(
-    (team) => team.name.trim().length > 0 && team.players.every((p) => p.name.trim().length > 0)
-  );
+  const canProceedStep2 = isAmericano
+    ? watchPlayers.length >= 4 && watchPlayers.every((p) => p.name.trim().length > 0)
+    : watchTeams.every(
+        (team) => team.name.trim().length > 0 && team.players.every((p) => p.name.trim().length > 0)
+      );
 
   const steps = [
     { number: 1, title: "Details" },
-    { number: 2, title: "Teams" },
+    { number: 2, title: isAmericano ? "Players" : "Teams" },
     { number: 3, title: "Review" },
   ];
 
@@ -185,6 +234,7 @@ export default function CreateTournamentPage() {
       case "single-elimination": return "Single Elimination";
       case "round-robin": return "Round Robin";
       case "multi-stage": return "Multi-Stage";
+      case "americano": return "Americano";
       default: return format;
     }
   };
@@ -273,15 +323,38 @@ export default function CreateTournamentPage() {
                           onValueChange={(value) => {
                             field.onChange(value);
                             const newType = value as TournamentType;
-                            const playersCount = getPlayersCount(newType);
-                            const currentTeams = form.getValues("teams");
-                            const updatedTeams = currentTeams.map((team) => ({
-                              ...team,
-                              players: Array.from({ length: playersCount }, (_, i) =>
-                                team.players[i] || createEmptyPlayer()
-                              ),
-                            }));
-                            form.setValue("teams", updatedTeams);
+                            const isNewAmericano = isAmericanoType(newType);
+                            
+                            if (isNewAmericano) {
+                              form.setValue("format", "americano");
+                              form.setValue("teams", []);
+                              if ((form.getValues("players") || []).length < 4) {
+                                form.setValue("players", [
+                                  createEmptyPlayer(),
+                                  createEmptyPlayer(),
+                                  createEmptyPlayer(),
+                                  createEmptyPlayer(),
+                                ]);
+                              }
+                            } else {
+                              if (form.getValues("format") === "americano") {
+                                form.setValue("format", "single-elimination");
+                              }
+                              form.setValue("players", []);
+                              const playersCount = getPlayersCount(newType);
+                              const currentTeams = form.getValues("teams") || [];
+                              if (currentTeams.length < 2) {
+                                form.setValue("teams", [createEmptyTeam(newType), createEmptyTeam(newType)]);
+                              } else {
+                                const updatedTeams = currentTeams.map((team) => ({
+                                  ...team,
+                                  players: Array.from({ length: playersCount }, (_, i) =>
+                                    team.players[i] || createEmptyPlayer()
+                                  ),
+                                }));
+                                form.setValue("teams", updatedTeams);
+                              }
+                            }
                           }}
                           value={field.value}
                         >
@@ -293,7 +366,7 @@ export default function CreateTournamentPage() {
                           <SelectContent>
                             {sportTypesList.map((sport) => (
                               <SelectItem key={sport.id} value={sport.id} data-testid={`option-sport-${sport.id}`}>
-                                {sport.label} ({sport.players} player{sport.players !== 1 ? "s" : ""}/team)
+                                {sport.label} {sport.isAmericano ? "(Individual)" : `(${sport.players} player${sport.players !== 1 ? "s" : ""}/team)`}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -303,69 +376,79 @@ export default function CreateTournamentPage() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="format"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tournament Format</FormLabel>
-                        <FormControl>
-                          <RadioGroup
-                            onValueChange={field.onChange}
-                            value={field.value}
-                            className="grid grid-cols-1 gap-4"
-                          >
-                            <Label
-                              className={`flex flex-col rounded-md border-2 p-4 cursor-pointer transition-colors hover-elevate ${
-                                field.value === "single-elimination"
-                                  ? "border-primary bg-primary/5"
-                                  : "border-muted"
-                              }`}
-                              data-testid="radio-format-knockout"
+                  {isAmericanoType(watchType) ? (
+                    <div className="border rounded-lg p-4 bg-muted/30">
+                      <h4 className="font-medium mb-2">Americano Format</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Partners rotate each round so everyone plays with everyone. 
+                        Individual points accumulate - highest total wins!
+                      </p>
+                    </div>
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="format"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tournament Format</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              value={field.value}
+                              className="grid grid-cols-1 gap-4"
                             >
-                              <RadioGroupItem value="single-elimination" className="sr-only" />
-                              <span className="font-medium">Single Elimination</span>
-                              <span className="text-sm text-muted-foreground">
-                                Knockout format - lose once and you're out
-                              </span>
-                            </Label>
-                            <Label
-                              className={`flex flex-col rounded-md border-2 p-4 cursor-pointer transition-colors hover-elevate ${
-                                field.value === "round-robin"
-                                  ? "border-primary bg-primary/5"
-                                  : "border-muted"
-                              }`}
-                              data-testid="radio-format-roundrobin"
-                            >
-                              <RadioGroupItem value="round-robin" className="sr-only" />
-                              <span className="font-medium">Round Robin</span>
-                              <span className="text-sm text-muted-foreground">
-                                Everyone plays everyone - standings table
-                              </span>
-                            </Label>
-                            <Label
-                              className={`flex flex-col rounded-md border-2 p-4 cursor-pointer transition-colors hover-elevate ${
-                                field.value === "multi-stage"
-                                  ? "border-primary bg-primary/5"
-                                  : "border-muted"
-                              }`}
-                              data-testid="radio-format-multistage"
-                            >
-                              <RadioGroupItem value="multi-stage" className="sr-only" />
-                              <div className="flex items-center gap-2">
-                                <Layers className="h-4 w-4" />
-                                <span className="font-medium">Multi-Stage</span>
-                              </div>
-                              <span className="text-sm text-muted-foreground">
-                                Group stage followed by knockout rounds
-                              </span>
-                            </Label>
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                              <Label
+                                className={`flex flex-col rounded-md border-2 p-4 cursor-pointer transition-colors hover-elevate ${
+                                  field.value === "single-elimination"
+                                    ? "border-primary bg-primary/5"
+                                    : "border-muted"
+                                }`}
+                                data-testid="radio-format-knockout"
+                              >
+                                <RadioGroupItem value="single-elimination" className="sr-only" />
+                                <span className="font-medium">Single Elimination</span>
+                                <span className="text-sm text-muted-foreground">
+                                  Knockout format - lose once and you're out
+                                </span>
+                              </Label>
+                              <Label
+                                className={`flex flex-col rounded-md border-2 p-4 cursor-pointer transition-colors hover-elevate ${
+                                  field.value === "round-robin"
+                                    ? "border-primary bg-primary/5"
+                                    : "border-muted"
+                                }`}
+                                data-testid="radio-format-roundrobin"
+                              >
+                                <RadioGroupItem value="round-robin" className="sr-only" />
+                                <span className="font-medium">Round Robin</span>
+                                <span className="text-sm text-muted-foreground">
+                                  Everyone plays everyone - standings table
+                                </span>
+                              </Label>
+                              <Label
+                                className={`flex flex-col rounded-md border-2 p-4 cursor-pointer transition-colors hover-elevate ${
+                                  field.value === "multi-stage"
+                                    ? "border-primary bg-primary/5"
+                                    : "border-muted"
+                                }`}
+                                data-testid="radio-format-multistage"
+                              >
+                                <RadioGroupItem value="multi-stage" className="sr-only" />
+                                <div className="flex items-center gap-2">
+                                  <Layers className="h-4 w-4" />
+                                  <span className="font-medium">Multi-Stage</span>
+                                </div>
+                                <span className="text-sm text-muted-foreground">
+                                  Group stage followed by knockout rounds
+                                </span>
+                              </Label>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   {watchFormat === "multi-stage" && (
                     <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
@@ -395,6 +478,47 @@ export default function CreateTournamentPage() {
                     </div>
                   )}
 
+                  {isAmericanoType(watchType) && (
+                    <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                      <h4 className="font-medium">Americano Settings</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm">Points per Match</Label>
+                          <Select
+                            value={String(watchAmericanoSettings?.pointsPerMatch || 32)}
+                            onValueChange={(val) => updateAmericanoSettings("pointsPerMatch", parseInt(val))}
+                          >
+                            <SelectTrigger className="mt-1" data-testid="select-points-per-match">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="16">16 points</SelectItem>
+                              <SelectItem value="24">24 points</SelectItem>
+                              <SelectItem value="32">32 points</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-sm">Number of Courts</Label>
+                          <Select
+                            value={String(watchAmericanoSettings?.courts || 1)}
+                            onValueChange={(val) => updateAmericanoSettings("courts", parseInt(val))}
+                          >
+                            <SelectTrigger className="mt-1" data-testid="select-courts">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 court</SelectItem>
+                              <SelectItem value="2">2 courts</SelectItem>
+                              <SelectItem value="3">3 courts</SelectItem>
+                              <SelectItem value="4">4 courts</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-end pt-4">
                     <Button
                       type="button"
@@ -402,7 +526,7 @@ export default function CreateTournamentPage() {
                       disabled={!canProceedStep1}
                       data-testid="button-next-step-1"
                     >
-                      Next: Add Teams
+                      Next: Add {isAmericanoType(watchType) ? "Players" : "Teams"}
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -413,66 +537,112 @@ export default function CreateTournamentPage() {
             {step === 2 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Teams & Players</CardTitle>
+                  <CardTitle>{isAmericano ? "Players" : "Teams & Players"}</CardTitle>
                   <CardDescription>
-                    Add at least 2 teams with {getPlayersCount(watchType)} player{getPlayersCount(watchType) !== 1 ? "s" : ""} each.
+                    {isAmericano 
+                      ? "Add at least 4 players for the Americano tournament."
+                      : `Add at least 2 teams with ${getPlayersCount(watchType)} player${getPlayersCount(watchType) !== 1 ? "s" : ""} each.`
+                    }
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {watchTeams.map((team, teamIndex) => (
-                    <div key={team.id} className="border rounded-lg p-4 space-y-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1">
-                          <Label className="text-xs text-muted-foreground">Team Name</Label>
-                          <Input
-                            placeholder={`Team ${teamIndex + 1}`}
-                            value={team.name}
-                            onChange={(e) => updateTeamName(teamIndex, e.target.value)}
-                            data-testid={`input-team-name-${teamIndex}`}
-                          />
-                        </div>
-                        {watchTeams.length > 2 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeTeam(teamIndex)}
-                            className="shrink-0 mt-5"
-                            data-testid={`button-remove-team-${teamIndex}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
-                      </div>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {team.players.map((player, playerIndex) => (
-                          <div key={player.id}>
-                            <Label className="text-xs text-muted-foreground">
-                              Player {playerIndex + 1}
-                            </Label>
-                            <Input
-                              placeholder={`Player ${playerIndex + 1} name`}
-                              value={player.name}
-                              onChange={(e) => updatePlayerName(teamIndex, playerIndex, e.target.value)}
-                              data-testid={`input-player-${teamIndex}-${playerIndex}`}
-                            />
+                  {isAmericano ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {watchPlayers.map((player, index) => (
+                          <div key={player.id} className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <Label className="text-xs text-muted-foreground">Player {index + 1}</Label>
+                              <Input
+                                placeholder={`Player ${index + 1} name`}
+                                value={player.name}
+                                onChange={(e) => updateAmericanoPlayerName(index, e.target.value)}
+                                data-testid={`input-americano-player-${index}`}
+                              />
+                            </div>
+                            {watchPlayers.length > 4 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeAmericanoPlayer(index)}
+                                className="shrink-0 mt-5"
+                                data-testid={`button-remove-player-${index}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
                           </div>
                         ))}
                       </div>
-                    </div>
-                  ))}
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addTeam}
-                    className="w-full"
-                    data-testid="button-add-team"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Another Team
-                  </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addAmericanoPlayer}
+                        className="w-full"
+                        data-testid="button-add-player"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Another Player
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {watchTeams.map((team, teamIndex) => (
+                        <div key={team.id} className="border rounded-lg p-4 space-y-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <Label className="text-xs text-muted-foreground">Team Name</Label>
+                              <Input
+                                placeholder={`Team ${teamIndex + 1}`}
+                                value={team.name}
+                                onChange={(e) => updateTeamName(teamIndex, e.target.value)}
+                                data-testid={`input-team-name-${teamIndex}`}
+                              />
+                            </div>
+                            {watchTeams.length > 2 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeTeam(teamIndex)}
+                                className="shrink-0 mt-5"
+                                data-testid={`button-remove-team-${teamIndex}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {team.players.map((player, playerIndex) => (
+                              <div key={player.id}>
+                                <Label className="text-xs text-muted-foreground">
+                                  Player {playerIndex + 1}
+                                </Label>
+                                <Input
+                                  placeholder={`Player ${playerIndex + 1} name`}
+                                  value={player.name}
+                                  onChange={(e) => updateTeamPlayerName(teamIndex, playerIndex, e.target.value)}
+                                  data-testid={`input-player-${teamIndex}-${playerIndex}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addTeam}
+                        className="w-full"
+                        data-testid="button-add-team"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Another Team
+                      </Button>
+                    </>
+                  )}
 
                   <div className="flex justify-between pt-4">
                     <Button
@@ -530,17 +700,41 @@ export default function CreateTournamentPage() {
                         </p>
                       </div>
                     )}
+                    {isAmericano && watchAmericanoSettings && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Points per Match</Label>
+                          <p className="font-medium">{watchAmericanoSettings.pointsPerMatch} points</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Courts</Label>
+                          <p className="font-medium">{watchAmericanoSettings.courts} court{watchAmericanoSettings.courts > 1 ? "s" : ""}</p>
+                        </div>
+                      </div>
+                    )}
                     <div>
-                      <Label className="text-xs text-muted-foreground">Teams ({watchTeams.length})</Label>
+                      <Label className="text-xs text-muted-foreground">
+                        {isAmericano ? `Players (${watchPlayers.length})` : `Teams (${watchTeams.length})`}
+                      </Label>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {watchTeams.map((team) => (
-                          <span
-                            key={team.id}
-                            className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-sm"
-                          >
-                            {team.name}
-                          </span>
-                        ))}
+                        {isAmericano 
+                          ? watchPlayers.map((player) => (
+                              <span
+                                key={player.id}
+                                className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-sm"
+                              >
+                                {player.name}
+                              </span>
+                            ))
+                          : watchTeams.map((team) => (
+                              <span
+                                key={team.id}
+                                className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-sm"
+                              >
+                                {team.name}
+                              </span>
+                            ))
+                        }
                       </div>
                     </div>
                   </div>

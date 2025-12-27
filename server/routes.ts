@@ -14,7 +14,7 @@ export async function registerRoutes(
       const type = req.query.type as TournamentType | undefined;
       let tournaments;
       
-      if (type && ["padel", "football-8", "football-5"].includes(type)) {
+      if (type) {
         tournaments = await storage.getTournamentsByType(type);
       } else {
         tournaments = await storage.getAllTournaments();

@@ -2,7 +2,7 @@
 
 ## Overview
 
-TourneyPro is a full-stack web application for creating and managing sports tournaments. It supports three sport types: Padel (2 players per team), 8-sided Football (8 players per team), and 5-sided Football (5 players per team). Users can create tournaments with single-elimination or round-robin formats, manage teams and players, track match scores in real-time, and view brackets and standings.
+TourneyPro is a full-stack web application for creating and managing sports tournaments. It supports multiple sport types including Padel (2 players per team), Padel Americano (individual players with rotating partners), Tennis (singles/doubles), Badminton (singles/doubles), Basketball, Volleyball, and Football (8v8 and 5v5). Users can create tournaments with various formats including single-elimination, round-robin, multi-stage (group + knockout), and Americano format. Features include team and player management, real-time match score tracking, bracket visualization, standings tables, and Americano leaderboards.
 
 ## User Preferences
 
@@ -33,13 +33,14 @@ The server uses a simple storage interface (`IStorage`) that currently uses in-m
 
 ### Data Models
 Core entities defined in `shared/schema.ts`:
-- **Tournament**: Contains type, format, teams, matches, and metadata
+- **Tournament**: Contains type, format, teams, matches, stages, and metadata. Americano tournaments use `players` and `americanoSettings` instead of teams.
 - **Team**: Has ID, name, and array of players
-- **Match**: Tracks round, scores, status (upcoming/live/completed), and winner
+- **Match**: Tracks round, scores, status (upcoming/live/completed), winner, and optional `team1PlayerIds`/`team2PlayerIds` for Americano format
 - **Player**: Simple ID and name structure
+- **AmericanoSettings**: Points per match (16/24/32) and number of courts
 
-Tournament types: `padel`, `football-8`, `football-5`
-Tournament formats: `single-elimination`, `round-robin`
+Tournament types: `padel`, `padel-americano`, `football-8`, `football-5`, `basketball`, `volleyball`, `tennis-singles`, `tennis-doubles`, `badminton-singles`, `badminton-doubles`
+Tournament formats: `single-elimination`, `round-robin`, `multi-stage`, `americano`
 
 ### Build System
 - Development: Vite dev server with HMR proxied through Express

@@ -12,12 +12,13 @@ import { MatchList } from "@/components/match-list";
 import { ScoreDialog } from "@/components/score-dialog";
 import { ArrowLeft, Trophy, Users, Calendar, Share2, Copy, Check, Layers } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Tournament, Match, TournamentType, TournamentFormat } from "@shared/schema";
+import type { Tournament, Match, TournamentType, TournamentFormat, Player } from "@shared/schema";
 import { sportConfig } from "@shared/schema";
 
 function getBackPath(type: TournamentType): string {
   if (type === "badminton-singles" || type === "badminton-doubles") return "/badminton";
   if (type === "tennis-singles" || type === "tennis-doubles") return "/tennis";
+  if (type === "padel-americano") return "/padel-americano";
   return `/${type}`;
 }
 
@@ -26,8 +27,61 @@ function getFormatLabel(format: TournamentFormat): string {
     case "single-elimination": return "Single Elimination";
     case "round-robin": return "Round Robin";
     case "multi-stage": return "Multi-Stage";
+    case "americano": return "Americano";
     default: return format;
   }
+}
+
+interface AmericanoLeaderboardEntry {
+  player: Player;
+  matchesPlayed: number;
+  totalPoints: number;
+  pointsAgainst: number;
+}
+
+function calculateAmericanoLeaderboard(tournament: Tournament): AmericanoLeaderboardEntry[] {
+  if (!tournament.players) return [];
+  
+  const playerStats = new Map<string, AmericanoLeaderboardEntry>();
+  
+  tournament.players.forEach((player) => {
+    playerStats.set(player.id, {
+      player,
+      matchesPlayed: 0,
+      totalPoints: 0,
+      pointsAgainst: 0,
+    });
+  });
+
+  tournament.matches
+    .filter((m) => m.status === "completed" && m.team1PlayerIds && m.team2PlayerIds)
+    .forEach((match) => {
+      const team1Score = match.team1Score || 0;
+      const team2Score = match.team2Score || 0;
+
+      match.team1PlayerIds?.forEach((playerId) => {
+        const stats = playerStats.get(playerId);
+        if (stats) {
+          stats.matchesPlayed++;
+          stats.totalPoints += team1Score;
+          stats.pointsAgainst += team2Score;
+        }
+      });
+
+      match.team2PlayerIds?.forEach((playerId) => {
+        const stats = playerStats.get(playerId);
+        if (stats) {
+          stats.matchesPlayed++;
+          stats.totalPoints += team2Score;
+          stats.pointsAgainst += team1Score;
+        }
+      });
+    });
+
+  return Array.from(playerStats.values()).sort((a, b) => {
+    if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+    return (b.totalPoints - b.pointsAgainst) - (a.totalPoints - a.pointsAgainst);
+  });
 }
 
 export default function TournamentDetailPage() {
@@ -109,11 +163,18 @@ export default function TournamentDetailPage() {
   const liveMatches = tournament.matches.filter((m) => m.status === "live").length;
   const upcomingMatches = tournament.matches.filter((m) => m.status === "upcoming").length;
 
+  const isAmericano = tournament.format === "americano";
+  const americanoLeaderboard = isAmericano ? calculateAmericanoLeaderboard(tournament) : [];
+  const participantCount = isAmericano 
+    ? (tournament.players?.length || 0) 
+    : tournament.teams.length;
+
   const hasGroupStage = tournament.format === "multi-stage" && tournament.stages?.some(s => s.type === "group");
   const hasKnockout = tournament.format === "single-elimination" || 
     (tournament.format === "multi-stage" && tournament.stages?.some(s => s.type === "knockout"));
 
   const getDefaultTab = () => {
+    if (tournament.format === "americano") return "leaderboard";
     if (tournament.format === "single-elimination") return "bracket";
     if (tournament.format === "round-robin") return "standings";
     if (tournament.format === "multi-stage") return hasGroupStage ? "groups" : "bracket";
@@ -153,7 +214,7 @@ export default function TournamentDetailPage() {
                 {getFormatLabel(tournament.format)}
               </span>
               <span>•</span>
-              <span>{tournament.teams.length} Teams</span>
+              <span>{participantCount} {isAmericano ? "Players" : "Teams"}</span>
             </div>
           </div>
 
@@ -180,8 +241,8 @@ export default function TournamentDetailPage() {
                   <Users className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold font-mono">{tournament.teams.length}</p>
-                  <p className="text-xs text-muted-foreground">Teams</p>
+                  <p className="text-2xl font-bold font-mono">{participantCount}</p>
+                  <p className="text-xs text-muted-foreground">{isAmericano ? "Players" : "Teams"}</p>
                 </div>
               </div>
             </CardContent>
@@ -229,6 +290,9 @@ export default function TournamentDetailPage() {
 
         <Tabs defaultValue={getDefaultTab()} className="w-full">
           <TabsList className="mb-6">
+            {isAmericano && (
+              <TabsTrigger value="leaderboard" data-testid="tab-leaderboard">Leaderboard</TabsTrigger>
+            )}
             {tournament.format === "single-elimination" && (
               <TabsTrigger value="bracket" data-testid="tab-bracket">Bracket</TabsTrigger>
             )}
@@ -242,8 +306,66 @@ export default function TournamentDetailPage() {
               <TabsTrigger value="bracket" data-testid="tab-bracket">Knockout</TabsTrigger>
             )}
             <TabsTrigger value="matches" data-testid="tab-matches">Matches</TabsTrigger>
-            <TabsTrigger value="teams" data-testid="tab-teams">Teams</TabsTrigger>
+            <TabsTrigger value="teams" data-testid="tab-teams">{isAmericano ? "Players" : "Teams"}</TabsTrigger>
           </TabsList>
+
+          {isAmericano && (
+            <TabsContent value="leaderboard">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Player Leaderboard</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">#</th>
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Player</th>
+                          <th className="text-center py-3 px-4 font-medium text-muted-foreground">Matches</th>
+                          <th className="text-center py-3 px-4 font-medium text-muted-foreground">Points</th>
+                          <th className="text-center py-3 px-4 font-medium text-muted-foreground">+/-</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {americanoLeaderboard.map((entry, index) => (
+                          <tr key={entry.player.id} className="border-b last:border-0" data-testid={`leaderboard-row-${entry.player.id}`}>
+                            <td className="py-3 px-4">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                index === 0 ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400" :
+                                index === 1 ? "bg-gray-400/20 text-gray-600 dark:text-gray-400" :
+                                index === 2 ? "bg-orange-500/20 text-orange-600 dark:text-orange-400" :
+                                "bg-muted text-muted-foreground"
+                              }`}>
+                                {index + 1}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-medium">{entry.player.name}</td>
+                            <td className="py-3 px-4 text-center font-mono">{entry.matchesPlayed}</td>
+                            <td className="py-3 px-4 text-center font-mono font-bold">{entry.totalPoints}</td>
+                            <td className={`py-3 px-4 text-center font-mono ${
+                              entry.totalPoints - entry.pointsAgainst > 0 ? "text-green-600 dark:text-green-400" :
+                              entry.totalPoints - entry.pointsAgainst < 0 ? "text-red-600 dark:text-red-400" :
+                              "text-muted-foreground"
+                            }`}>
+                              {entry.totalPoints - entry.pointsAgainst > 0 ? "+" : ""}{entry.totalPoints - entry.pointsAgainst}
+                            </td>
+                          </tr>
+                        ))}
+                        {americanoLeaderboard.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                              No matches completed yet. Start playing to see the leaderboard!
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
 
           {tournament.format === "single-elimination" && (
             <TabsContent value="bracket">
@@ -296,31 +418,53 @@ export default function TournamentDetailPage() {
           </TabsContent>
 
           <TabsContent value="teams">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tournament.teams.map((team) => (
-                <Card key={team.id}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">{team.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {team.players.map((player, index) => (
-                        <div
-                          key={player.id}
-                          className="flex items-center gap-2 text-sm"
-                          data-testid={`team-player-${team.id}-${index}`}
-                        >
-                          <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-                            {index + 1}
-                          </div>
-                          <span>{player.name}</span>
+            {isAmericano ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {tournament.players?.map((player, index) => (
+                  <Card key={player.id}>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                          {index + 1}
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                        <div>
+                          <p className="font-medium" data-testid={`player-name-${player.id}`}>{player.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {americanoLeaderboard.find(e => e.player.id === player.id)?.totalPoints || 0} points
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {tournament.teams.map((team) => (
+                  <Card key={team.id}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">{team.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {team.players.map((player, index) => (
+                          <div
+                            key={player.id}
+                            className="flex items-center gap-2 text-sm"
+                            data-testid={`team-player-${team.id}-${index}`}
+                          >
+                            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                              {index + 1}
+                            </div>
+                            <span>{player.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 

@@ -327,38 +327,75 @@ function generateAmericanoMatches(players: Player[], courts: number): Match[] {
     throw new Error("At least 4 players are required for Americano");
   }
   
-  const pairings: [number, number][] = [];
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      pairings.push([i, j]);
+  const allValidMatches: { team1: [number, number]; team2: [number, number] }[] = [];
+  
+  for (let a = 0; a < n; a++) {
+    for (let b = a + 1; b < n; b++) {
+      for (let c = 0; c < n; c++) {
+        if (c === a || c === b) continue;
+        for (let d = c + 1; d < n; d++) {
+          if (d === a || d === b) continue;
+          if (a < c || (a === c && b < d)) {
+            allValidMatches.push({ team1: [a, b], team2: [c, d] });
+          }
+        }
+      }
     }
   }
   
-  const shuffledPairings = pairings.sort(() => Math.random() - 0.5);
+  const shuffledMatches = allValidMatches.sort(() => Math.random() - 0.5);
   
+  const partnerCounts = new Map<string, number>();
+  const getPartnerKey = (p1: number, p2: number) => 
+    p1 < p2 ? `${p1}-${p2}` : `${p2}-${p1}`;
+  
+  const maxPartnerships = Math.min(3, n - 1);
+  const selectedMatches: typeof allValidMatches = [];
+  
+  for (const match of shuffledMatches) {
+    const key1 = getPartnerKey(match.team1[0], match.team1[1]);
+    const key2 = getPartnerKey(match.team2[0], match.team2[1]);
+    
+    const count1 = partnerCounts.get(key1) || 0;
+    const count2 = partnerCounts.get(key2) || 0;
+    
+    if (count1 < maxPartnerships && count2 < maxPartnerships) {
+      selectedMatches.push(match);
+      partnerCounts.set(key1, count1 + 1);
+      partnerCounts.set(key2, count2 + 1);
+    }
+  }
+  
+  const usedMatches = new Set<number>();
   let round = 1;
   let matchNumber = 1;
-  let pairingIndex = 0;
   
-  while (pairingIndex < shuffledPairings.length - 1) {
-    const matchesPerRound = Math.min(courts, Math.floor((shuffledPairings.length - pairingIndex) / 2));
+  while (usedMatches.size < selectedMatches.length) {
+    const playersUsedInRound = new Set<number>();
+    let matchesThisRound = 0;
     
-    for (let m = 0; m < matchesPerRound && pairingIndex < shuffledPairings.length - 1; m++) {
-      const pair1 = shuffledPairings[pairingIndex];
-      const pair2 = shuffledPairings[pairingIndex + 1];
+    for (let i = 0; i < selectedMatches.length && matchesThisRound < courts; i++) {
+      if (usedMatches.has(i)) continue;
       
-      if (!pair1 || !pair2) break;
+      const matchData = selectedMatches[i];
+      const matchPlayers = [matchData.team1[0], matchData.team1[1], matchData.team2[0], matchData.team2[1]];
       
-      const team1PlayerIds = [players[pair1[0]].id, players[pair1[1]].id];
-      const team2PlayerIds = [players[pair2[0]].id, players[pair2[1]].id];
+      const hasConflict = matchPlayers.some(p => playersUsedInRound.has(p));
+      if (hasConflict) continue;
+      
+      matchPlayers.forEach(p => playersUsedInRound.add(p));
+      usedMatches.add(i);
+      
+      const team1PlayerIds = [players[matchData.team1[0]].id, players[matchData.team1[1]].id];
+      const team2PlayerIds = [players[matchData.team2[0]].id, players[matchData.team2[1]].id];
       
       matches.push({
         id: randomUUID(),
         tournamentId: "",
         round,
         matchNumber: matchNumber++,
-        team1Id: `round-${round}-match-${m}-team1`,
-        team2Id: `round-${round}-match-${m}-team2`,
+        team1Id: `round-${round}-match-${matchesThisRound}-team1`,
+        team2Id: `round-${round}-match-${matchesThisRound}-team2`,
         team1Score: 0,
         team2Score: 0,
         status: "upcoming",
@@ -367,7 +404,11 @@ function generateAmericanoMatches(players: Player[], courts: number): Match[] {
         team2PlayerIds,
       });
       
-      pairingIndex += 2;
+      matchesThisRound++;
+    }
+    
+    if (matchesThisRound === 0) {
+      break;
     }
     
     round++;
